@@ -89,6 +89,7 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 | --- | --- | --- |
 | Claude Code | `.mcp.json`（项目）或 `~/.claude.json` | 自动展开 `${WEBPIPE_API_KEY}` |
 | WorkBuddy | `~/.workbuddy/mcp.json`（文件名开头没有点） | 保存后还需在连接器管理界面中信任/启用该服务器——只写配置文件不够 |
+| Trae | **没有——任何配置文件都不被加载**（实测：项目级 MCP JSON 被忽略，`projectCount: 0`） | 只能通过面板添加：AI 侧边栏 → MCP 管理 → 添加 MCP → 粘贴 JSON → 启用 → 重启 Trae。Key 放用户级环境变量，粘贴的 JSON 中省略 `env` 字段 |
 | Cursor | `~/.cursor/mcp.json`（全局）或 `.cursor/mcp.json`（项目） | 同样是 `mcpServers` 结构 |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | 同样是 `mcpServers` 结构 |
 | Claude Desktop | Windows：`%APPDATA%\Claude\claude_desktop_config.json`；macOS：`~/Library/Application Support/Claude/claude_desktop_config.json` | 使用相同的 JSON 结构 |
@@ -102,7 +103,13 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 
 ### 3. 在客户端内授权服务器（如需要）
 
-部分客户端（例如 WorkBuddy）在加载 MCP 服务器之前，还需要在其「MCP / 连接器」管理界面中显式信任/启用一次——只写配置文件是不够的。典型症状：配置看起来完全正确、服务器进程也能启动，但会话中看不到任何 `webpipe_*` 工具。处理：打开客户端的 MCP 管理界面，把 `webpipe` 信任/启用。
+不同客户端对「新注册的 MCP 服务器如何真正加载」行为不同。已知三类——先判断当前客户端属于哪类，再完成对应步骤：
+
+- **读文件、自动加载**（Claude Code、Cursor、Cline 等）：保存配置文件后重启/重扫即可。
+- **读文件 + 信任/启用开关**（WorkBuddy）：保存 `~/.workbuddy/mcp.json` 之后，还必须在连接器管理界面中信任/启用该服务器，否则会话中看不到任何 `webpipe_*` 工具。
+- **只认面板**（Trae）：客户端**完全不读取任何 MCP 配置文件**——写 `.trae/mcp.json` 会静默失败。唯一入口是面板：AI 侧边栏 → MCP 管理 → 添加 MCP → 粘贴 JSON → 启用 → 重启。
+
+三类情况的共同症状：配置看起来完全正确、服务器进程也能启动，但会话中看不到任何 `webpipe_*` 工具。此时检查客户端 MCP 管理界面有没有待信任/启用的开关；Trae 则直接改用面板注册。
 
 ### 4. 认证
 
@@ -111,7 +118,7 @@ WebPipe 使用单一 API Key。优先级从高到低：
 1. 工具调用时显式传入的 `api_key` 参数。
 2. 环境变量 `WEBPIPE_API_KEY`。
 
-客户端把 Key 作为环境变量 `WEBPIPE_API_KEY` 传给服务器。注意：GUI 客户端不一定继承用户级环境变量——如果环境变量明明已设置，`webpipe_verify_auth` 却报缺少 Key，请把 Key 直接写进客户端 MCP 配置的 `env` 字段。
+客户端把 Key 作为环境变量 `WEBPIPE_API_KEY` 传给服务器。请把它设置为**用户级环境变量**，GUI 客户端会把它继承进 MCP 子进程——已在 Trae 实测有效。如果某客户端确实不继承（环境变量明明已设置，`webpipe_verify_auth` 却报缺少 Key），才退而把 Key 写进客户端 MCP 配置的 `env` 字段，并提醒用户该 Key 将仅存在于这台机器的配置文件中。
 
 在 https://webpipe.ai/api-keys.html 获取 Key。绝不要打印、echo、记录日志或提交它。
 

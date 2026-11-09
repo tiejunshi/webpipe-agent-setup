@@ -91,6 +91,7 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 | --- | --- | --- |
 | Claude Code | `.mcp.json` (project) or `~/.claude.json` | Expands `${WEBPIPE_API_KEY}` automatically |
 | WorkBuddy | `~/.workbuddy/mcp.json` (file name has no leading dot) | After saving, also trust/enable the server in the connectors UI — the config file alone is not enough |
+| Trae | **none — config files are NOT loaded** (verified: project-level MCP JSON is ignored, `projectCount: 0`) | Add via the panel only: AI sidebar → MCP management → Add MCP → paste JSON → enable → restart Trae. Keep the API key in the user-level env var; omit `env` from the pasted JSON |
 | Cursor | `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project) | Same `mcpServers` shape |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | Same `mcpServers` shape |
 | Claude Desktop | Windows: `%APPDATA%\Claude\claude_desktop_config.json`; macOS: `~/Library/Application Support/Claude/claude_desktop_config.json` | Use the same JSON shape |
@@ -104,11 +105,22 @@ Replace `<venv-python>` with the venv interpreter path and `/absolute/path/to/we
 
 ### 3. Authorize the server inside the client (if required)
 
-Some clients (WorkBuddy, for example) require an explicit trust/enable step in
-their MCP/connectors management UI before the server is loaded — writing the
-config file alone is not enough. Symptom: the config looks correct and the
-server process launches, but no `webpipe_*` tools appear in the session. Fix:
-open the client's MCP management screen and trust/enable `webpipe` there.
+Clients differ in how a newly registered MCP server actually gets loaded. Three
+behaviors are known — identify which one applies and finish the extra step:
+
+- **File-based, auto-load** (Claude Code, Cursor, Cline, ...): saving the config
+  file is enough after a restart/rescan.
+- **File-based + trust/enable step** (WorkBuddy): after saving
+  `~/.workbuddy/mcp.json`, the server must also be trusted/enabled in the
+  connectors management UI, or no `webpipe_*` tools appear.
+- **Panel-only** (Trae): the client does NOT read any MCP config file at all —
+  writing `.trae/mcp.json` silently fails. The only entry point is the panel:
+  AI sidebar → MCP management → Add MCP → paste JSON → enable → restart.
+
+Common symptom across all cases: the config looks correct and the server
+process launches, but no `webpipe_*` tools appear in the session. Check the
+client's MCP management screen for a pending trust/enable switch, or — for
+Trae — switch to panel-based registration entirely.
 
 ### 4. Authenticate
 
@@ -117,7 +129,7 @@ WebPipe uses a single API key. Precedence, highest first:
 1. The explicit `api_key` argument passed to a tool call.
 2. The environment variable `WEBPIPE_API_KEY`.
 
-The client passes the key to the server as the environment variable `WEBPIPE_API_KEY`. GUI clients do not always inherit user-level environment variables — if `webpipe_verify_auth` reports a missing key although the variable is set, put the key directly into the `env` block of the client's MCP config.
+The client passes the key to the server as the environment variable `WEBPIPE_API_KEY`. Set it as a **user-level environment variable** so GUI clients inherit it into the MCP subprocess — verified working in Trae. If a client demonstrably does not inherit it (verify_auth reports a missing key although the variable is set), put the key into the `env` block of the client's MCP config as a last resort, and note that the file then lives on this machine only.
 
 Get a key at https://webpipe.ai/api-keys.html. Never print, echo, log, or commit it.
 
