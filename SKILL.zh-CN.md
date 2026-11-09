@@ -36,61 +36,13 @@ codex mcp list       # Codex
 
 如果 `webpipe` 已经列出，跳过安装，直接进入"认证 / 验证"。
 
-3. 选择部署轨道（详见下一节）：
-   - **轨道 A（推荐）：在线 — 远程 HTTP MCP**，地址 `https://mcp.webpipe.ai`。只要宿主支持远程 HTTP（streamable HTTP）MCP 就用这条。
-   - **轨道 B：本地 — Python stdio 服务器**。仅当宿主只能运行本地 stdio MCP 服务器，或用户明确想要自托管服务器时使用。
+3. WebPipe 目前只提供本地 Python stdio MCP 服务器这一种形态（没有托管的远程服务器）。下一步安装即覆盖这唯一路径。
 4. 先在环境变量 `WEBPIPE_API_KEY` 中查找已有的 WebPipe API Key。找到就复用。绝不要打印、记录日志或提交它。
 5. 如果没有 Key，告诉用户去 https://webpipe.ai/api-keys.html 创建一个，并把它设为 `WEBPIPE_API_KEY`。不要自行编造 Key 值。
 
 ### 2. 安装 WebPipe MCP 服务器
 
-#### 轨道 A — 在线（远程 HTTP MCP，推荐）
-
-无需本地依赖。智能体直接连接 `https://mcp.webpipe.ai`。
-
-**Claude Code**（CLI）：
-
-```bash
-claude mcp add --transport http webpipe https://mcp.webpipe.ai \
-  --header "Authorization: Bearer $WEBPIPE_API_KEY"
-```
-
-**Codex**（CLI）：
-
-```bash
-codex mcp add webpipe --url https://mcp.webpipe.ai \
-  --bearer-token-env-var WEBPIPE_API_KEY
-```
-
-**JSON 配置类智能体。** 下面的模板以 **Claude Code 的 `.mcp.json` 格式**为模版（`mcpServers` + `type: "http"`）。其他智能体结构相同但文件位置不同——见模板后的表格：
-
-```json
-{
-  "mcpServers": {
-    "webpipe": {
-      "type": "http",
-      "url": "https://mcp.webpipe.ai",
-      "headers": { "Authorization": "Bearer ${WEBPIPE_API_KEY}" }
-    }
-  }
-}
-```
-
-| 智能体 | 配置文件 | 说明 |
-| --- | --- | --- |
-| Claude Code | `.mcp.json`（项目）或 `~/.claude.json` | 自动展开 `${WEBPIPE_API_KEY}` |
-| Cursor | `~/.cursor/mcp.json`（全局）或 `.cursor/mcp.json`（项目） | 同样是 `mcpServers` 结构；支持远程 HTTP |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` | 同样是 `mcpServers` 结构 |
-| Claude Desktop | Windows：`%APPDATA%\Claude\claude_desktop_config.json`；macOS：`~/Library/Application Support/Claude/claude_desktop_config.json` | 使用相同的 JSON 结构；远程服务器也可以通过 Connectors 界面（粘贴 URL）添加 |
-| Cline | 在 Cline 的 "MCP Servers" 面板中配置 | 面板接受相同的 `mcpServers` JSON |
-| VS Code（Copilot） | `.vscode/mcp.json` | 结构不同：顶层键是 `"servers"` 而不是 `"mcpServers"` |
-| Gemini CLI | `~/.gemini/settings.json` | 设置中的 `mcpServers` 键 |
-
-支持环境变量展开的客户端（例如 Claude Code）会自动替换 `${WEBPIPE_API_KEY}`。不支持的客户端，请把 `${WEBPIPE_API_KEY}` 换成真实的 Key——并提醒用户：此时 Key 会明文存在配置文件里。
-
-#### 轨道 B — 本地（Python stdio 服务器）
-
-仅当宿主无法使用远程服务器，或用户明确要求自托管服务器时使用。
+#### 本地（Python stdio 服务器）
 
 先安装依赖并获取服务器代码：
 
@@ -113,7 +65,7 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
   -- python /absolute/path/to/webpipe-mcp/server.py
 ```
 
-**JSON 配置类智能体。** 下面的模板以 **Claude Desktop 的配置文件格式**为模版（`mcpServers` + `command`/`args`/`env`——这是大多数客户端沿用的 stdio 事实模版）。文件位置见轨道 A 中的表格：
+**JSON 配置类智能体。** 下面的模板以 **Claude Desktop 的配置文件格式**为模版（`mcpServers` + `command`/`args`/`env`——这是大多数客户端沿用的 stdio 事实模版）。其他智能体结构相同但文件位置不同——见模板后的表格：
 
 ```json
 {
@@ -127,6 +79,18 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 }
 ```
 
+| 智能体 | 配置文件 | 说明 |
+| --- | --- | --- |
+| Claude Code | `.mcp.json`（项目）或 `~/.claude.json` | 自动展开 `${WEBPIPE_API_KEY}` |
+| Cursor | `~/.cursor/mcp.json`（全局）或 `.cursor/mcp.json`（项目） | 同样是 `mcpServers` 结构 |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | 同样是 `mcpServers` 结构 |
+| Claude Desktop | Windows：`%APPDATA%\Claude\claude_desktop_config.json`；macOS：`~/Library/Application Support/Claude/claude_desktop_config.json` | 使用相同的 JSON 结构 |
+| Cline | 在 Cline 的 "MCP Servers" 面板中配置 | 面板接受相同的 `mcpServers` JSON |
+| VS Code（Copilot） | `.vscode/mcp.json` | 结构不同：顶层键是 `"servers"` 而不是 `"mcpServers"` |
+| Gemini CLI | `~/.gemini/settings.json` | 设置中的 `mcpServers` 键 |
+
+支持环境变量展开的客户端（例如 Claude Code）会自动替换 `${WEBPIPE_API_KEY}`。不支持的客户端，请把 `${WEBPIPE_API_KEY}` 换成真实的 Key——并提醒用户：此时 Key 会明文存在配置文件里。
+
 把 `/absolute/path/to/webpipe-mcp/server.py` 换成这台机器上的真实绝对路径，把 `your-webpipe-api-key` 换成从控制台获取的 Key。
 
 ### 3. 认证
@@ -136,10 +100,7 @@ WebPipe 使用单一 API Key。优先级从高到低：
 1. 工具调用时显式传入的 `api_key` 参数。
 2. 环境变量 `WEBPIPE_API_KEY`。
 
-Key 的传递方式取决于轨道：
-
-- **轨道 A（在线）：** 客户端把它作为 HTTP 头 `Authorization: Bearer <key>` 发送。
-- **轨道 B（本地）：** 客户端把它作为环境变量 `WEBPIPE_API_KEY` 传给服务器。
+客户端把 Key 作为环境变量 `WEBPIPE_API_KEY` 传给服务器。
 
 在 https://webpipe.ai/api-keys.html 获取 Key。绝不要打印、echo、记录日志或提交它。
 
@@ -161,7 +122,7 @@ webpipe_scrape(url="https://example.com")
 
 预期结果：返回一个非错误的结果，其 Markdown 包含 "Example Domain"。
 
-一次成功的 `webpipe_verify_auth` 即可判定轨道 A 安装完成。可选地，再对一个真实站点跑 `webpipe_map`、`webpipe_crawl`、`webpipe_browser`，确认完整的工具面都可用。
+一次成功的 `webpipe_verify_auth` 即可判定安装完成。可选地，再对一个真实站点跑 `webpipe_map`、`webpipe_crawl`、`webpipe_browser`，确认完整的工具面都可用。
 
 ### 5. 常见问题
 
@@ -174,7 +135,7 @@ webpipe_scrape(url="https://example.com")
 | `❌ Bad request` | 工具入参有误 | 复查必填的 `url` 以及可选参数 |
 | `🌐 Network error` | 到 `api.web2json.ai` 的出网或代理问题 | 稍等后重试一次；确认本机能连通 `api.web2json.ai` |
 | `❌ Resource not found or expired` | 爬取任务已超过 24 小时 | 重新执行爬取 |
-| `webpipe` 未列出 / MCP 连接失败 | URL 或命令写错 | 移除后重新添加；走轨道 B 时确认 Python 路径正确且 `pip install` 成功 |
+| `webpipe` 未列出 / MCP 连接失败 | URL 或命令写错 | 移除后重新添加；确认 Python 路径正确且 `pip install` 成功 |
 | 安装后看不到工具 | 客户端需要重启或重新扫描 | 重启客户端，再运行 `claude mcp list` / `codex mcp list` |
 
 只有当以下全部为真时，才报告 **WebPipe ready（WebPipe 已就绪）**：

@@ -36,61 +36,13 @@ codex mcp list       # Codex
 
 If `webpipe` is already listed, skip installation and go to Verify.
 
-3. Pick a deployment track (details in the next section):
-   - **Track A (recommended): Online — remote HTTP MCP** at `https://mcp.webpipe.ai`. Use whenever the host supports remote HTTP (streamable HTTP) MCP servers.
-   - **Track B: Local — Python stdio server**. Use when the host can only run local stdio MCP servers, or when the user wants to host the server themselves.
+3. WebPipe currently ships as a local Python stdio MCP server only (there is no hosted remote server). The install step below covers that single path.
 4. Look for an existing WebPipe API key in the environment variable `WEBPIPE_API_KEY`. Reuse it. Never print, log, or commit it.
 5. If no key exists, tell the user to create one at https://webpipe.ai/api-keys.html and set it as `WEBPIPE_API_KEY`. Do not invent a key value.
 
 ### 2. Install the WebPipe MCP server
 
-#### Track A — Online (remote HTTP MCP, recommended)
-
-No local dependencies. The agent connects straight to `https://mcp.webpipe.ai`.
-
-**Claude Code** (CLI):
-
-```bash
-claude mcp add --transport http webpipe https://mcp.webpipe.ai \
-  --header "Authorization: Bearer $WEBPIPE_API_KEY"
-```
-
-**Codex** (CLI):
-
-```bash
-codex mcp add webpipe --url https://mcp.webpipe.ai \
-  --bearer-token-env-var WEBPIPE_API_KEY
-```
-
-**JSON-configured agents.** The template below follows **Claude Code's `.mcp.json` format** (`mcpServers` + `type: "http"`). Other agents use the same shape but different file locations — see the table after the template:
-
-```json
-{
-  "mcpServers": {
-    "webpipe": {
-      "type": "http",
-      "url": "https://mcp.webpipe.ai",
-      "headers": { "Authorization": "Bearer ${WEBPIPE_API_KEY}" }
-    }
-  }
-}
-```
-
-| Agent | Config file | Notes |
-| --- | --- | --- |
-| Claude Code | `.mcp.json` (project) or `~/.claude.json` | Expands `${WEBPIPE_API_KEY}` automatically |
-| Cursor | `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project) | Same `mcpServers` shape; supports remote HTTP |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` | Same `mcpServers` shape |
-| Claude Desktop | Windows: `%APPDATA%\Claude\claude_desktop_config.json`; macOS: `~/Library/Application Support/Claude/claude_desktop_config.json` | Use the same JSON shape; remote servers can also be added via the Connectors UI (paste the URL) |
-| Cline | Configure in Cline's "MCP Servers" panel | Panel accepts the same `mcpServers` JSON |
-| VS Code (Copilot) | `.vscode/mcp.json` | Different schema: use `"servers"` as the top-level key instead of `"mcpServers"` |
-| Gemini CLI | `~/.gemini/settings.json` | `mcpServers` key inside settings |
-
-Clients that support environment-variable expansion (for example Claude Code) substitute `${WEBPIPE_API_KEY}` automatically. For clients that do not, put the literal key in place of `${WEBPIPE_API_KEY}` — warn the user that the key then sits in a plain config file.
-
-#### Track B — Local (Python stdio server)
-
-Use only when the host cannot use the remote server, or the user explicitly wants a self-hosted server.
+#### Local (Python stdio server)
 
 Install dependencies and get the server code:
 
@@ -113,7 +65,7 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
   -- python /absolute/path/to/webpipe-mcp/server.py
 ```
 
-**JSON-configured agents.** The template below follows **Claude Desktop's config file format** (`mcpServers` + `command`/`args`/`env` — the de-facto stdio template most clients copy). File locations are in the table under Track A:
+**JSON-configured agents.** The template below follows **Claude Desktop's config file format** (`mcpServers` + `command`/`args`/`env` — the de-facto stdio template most clients copy). Other agents use the same shape but different file locations — see the table after the template:
 
 ```json
 {
@@ -127,6 +79,18 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 }
 ```
 
+| Agent | Config file | Notes |
+| --- | --- | --- |
+| Claude Code | `.mcp.json` (project) or `~/.claude.json` | Expands `${WEBPIPE_API_KEY}` automatically |
+| Cursor | `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project) | Same `mcpServers` shape |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | Same `mcpServers` shape |
+| Claude Desktop | Windows: `%APPDATA%\Claude\claude_desktop_config.json`; macOS: `~/Library/Application Support/Claude/claude_desktop_config.json` | Use the same JSON shape |
+| Cline | Configure in Cline's "MCP Servers" panel | Panel accepts the same `mcpServers` JSON |
+| VS Code (Copilot) | `.vscode/mcp.json` | Different schema: use `"servers"` as the top-level key instead of `"mcpServers"` |
+| Gemini CLI | `~/.gemini/settings.json` | `mcpServers` key inside settings |
+
+Clients that support environment-variable expansion (for example Claude Code) substitute `${WEBPIPE_API_KEY}` automatically. For clients that do not, put the literal key in place of `${WEBPIPE_API_KEY}` — warn the user that the key then sits in a plain config file.
+
 Replace `/absolute/path/to/webpipe-mcp/server.py` with the real absolute path on this machine, and `your-webpipe-api-key` with the key from the dashboard.
 
 ### 3. Authenticate
@@ -136,10 +100,7 @@ WebPipe uses a single API key. Precedence, highest first:
 1. The explicit `api_key` argument passed to a tool call.
 2. The environment variable `WEBPIPE_API_KEY`.
 
-How the key travels depends on the track:
-
-- **Track A (online):** the client sends it as the HTTP header `Authorization: Bearer <key>`.
-- **Track B (local):** the client passes it to the server as the environment variable `WEBPIPE_API_KEY`.
+The client passes the key to the server as the environment variable `WEBPIPE_API_KEY`.
 
 Get a key at https://webpipe.ai/api-keys.html. Never print, echo, log, or commit it.
 
@@ -161,7 +122,7 @@ webpipe_scrape(url="https://example.com")
 
 Expected result: a non-error payload whose Markdown contains "Example Domain".
 
-One successful `webpipe_verify_auth` is enough to declare Track A installed. Optionally exercise `webpipe_map`, `webpipe_crawl`, and `webpipe_browser` on a real site to confirm the full tool surface.
+One successful `webpipe_verify_auth` is enough to declare setup complete. Optionally exercise `webpipe_map`, `webpipe_crawl`, and `webpipe_browser` on a real site to confirm the full tool surface.
 
 ### 5. Troubleshooting
 
@@ -174,7 +135,7 @@ Every tool returns errors as a readable string (never an exception), prefixed wi
 | `❌ Bad request` | Bad tool arguments | Re-check the required `url` and optional parameters |
 | `🌐 Network error` | Outbound network or proxy issue reaching `api.web2json.ai` | Retry once after a short wait; verify the machine can reach `api.web2json.ai` |
 | `❌ Resource not found or expired` | Crawl job older than 24 hours | Re-run the crawl |
-| `webpipe` not listed / MCP connection failed | Wrong URL or command | Remove and re-add the server; for Track B verify the Python path and that `pip install` succeeded |
+| `webpipe` not listed / MCP connection failed | Wrong URL or command | Remove and re-add the server; verify the Python path and that `pip install` succeeded |
 | Tools not visible after install | Client needs a restart or rescan | Restart the client, then re-run `claude mcp list` / `codex mcp list` |
 
 Only report **WebPipe ready** when all of these are true:
