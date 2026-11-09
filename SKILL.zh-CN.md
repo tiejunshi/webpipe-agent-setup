@@ -22,7 +22,7 @@ WebPipe 把网页转成智能体可直接使用的数据。它以 MCP 服务器�
 
 ## 自主安装
 
-把安装过程视为一个状态机：**预检 -> 安装 MCP -> 认证 -> 验证**。不要让用户去做任何智能体能从终端完成的步骤。
+把安装过程视为一个状态机：**预检 -> 安装 MCP -> 客户端内授权 -> 认证 -> 验证**。不要让用户去做任何智能体能从终端完成的步骤。
 
 ### 1. 预检
 
@@ -44,25 +44,31 @@ codex mcp list       # Codex
 
 #### 本地（Python stdio 服务器）
 
-先安装依赖并获取服务器代码：
+获取服务器代码，并在独立 venv 中安装依赖——不要把依赖 `pip install` 到共享/全局解释器（它常被其他工具共用）：
 
 ```bash
-pip install fastmcp webpipe-sdk
-# 服务器源码：https://github.com/tiejunshi/webpipe-mcp
+git clone https://github.com/tiejunshi/webpipe-mcp
+cd webpipe-mcp
+python -m venv .venv
+.venv/Scripts/pip install fastmcp webpipe-sdk      # Windows
+# .venv/bin/pip install fastmcp webpipe-sdk        # macOS / Linux
 ```
+
+MCP 注册必须指向 venv 解释器——Windows 是 `<仓库>/.venv/Scripts/python.exe`，
+macOS/Linux 是 `<仓库>/.venv/bin/python`——而不是全局 `python`，否则依赖导入会失败。
 
 **Claude Code**（CLI）：
 
 ```bash
 claude mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
-  -- python /absolute/path/to/webpipe-mcp/server.py
+  -- <venv-python> /absolute/path/to/webpipe-mcp/server.py
 ```
 
 **Codex**（CLI）：
 
 ```bash
 codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
-  -- python /absolute/path/to/webpipe-mcp/server.py
+  -- <venv-python> /absolute/path/to/webpipe-mcp/server.py
 ```
 
 **JSON 配置类智能体。** 下面的模板以 **Claude Desktop 的配置文件格式**为模版（`mcpServers` + `command`/`args`/`env`——这是大多数客户端沿用的 stdio 事实模版）。其他智能体结构相同但文件位置不同——见模板后的表格：
@@ -71,7 +77,7 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 {
   "mcpServers": {
     "webpipe": {
-      "command": "python",
+      "command": "<venv-python>",
       "args": ["/absolute/path/to/webpipe-mcp/server.py"],
       "env": { "WEBPIPE_API_KEY": "your-webpipe-api-key" }
     }
@@ -82,6 +88,7 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 | 智能体 | 配置文件 | 说明 |
 | --- | --- | --- |
 | Claude Code | `.mcp.json`（项目）或 `~/.claude.json` | 自动展开 `${WEBPIPE_API_KEY}` |
+| WorkBuddy | `~/.workbuddy/mcp.json`（文件名开头没有点） | 保存后还需在连接器管理界面中信任/启用该服务器——只写配置文件不够 |
 | Cursor | `~/.cursor/mcp.json`（全局）或 `.cursor/mcp.json`（项目） | 同样是 `mcpServers` 结构 |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | 同样是 `mcpServers` 结构 |
 | Claude Desktop | Windows：`%APPDATA%\Claude\claude_desktop_config.json`；macOS：`~/Library/Application Support/Claude/claude_desktop_config.json` | 使用相同的 JSON 结构 |
@@ -91,20 +98,24 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 
 支持环境变量展开的客户端（例如 Claude Code）会自动替换 `${WEBPIPE_API_KEY}`。不支持的客户端，请把 `${WEBPIPE_API_KEY}` 换成真实的 Key——并提醒用户：此时 Key 会明文存在配置文件里。
 
-把 `/absolute/path/to/webpipe-mcp/server.py` 换成这台机器上的真实绝对路径，把 `your-webpipe-api-key` 换成从控制台获取的 Key。
+把 `<venv-python>` 换成 venv 解释器路径，`/absolute/path/to/webpipe-mcp/server.py` 换成这台机器上的真实绝对路径，`your-webpipe-api-key` 换成从控制台获取的 Key。
 
-### 3. 认证
+### 3. 在客户端内授权服务器（如需要）
+
+部分客户端（例如 WorkBuddy）在加载 MCP 服务器之前，还需要在其「MCP / 连接器」管理界面中显式信任/启用一次——只写配置文件是不够的。典型症状：配置看起来完全正确、服务器进程也能启动，但会话中看不到任何 `webpipe_*` 工具。处理：打开客户端的 MCP 管理界面，把 `webpipe` 信任/启用。
+
+### 4. 认证
 
 WebPipe 使用单一 API Key。优先级从高到低：
 
 1. 工具调用时显式传入的 `api_key` 参数。
 2. 环境变量 `WEBPIPE_API_KEY`。
 
-客户端把 Key 作为环境变量 `WEBPIPE_API_KEY` 传给服务器。
+客户端把 Key 作为环境变量 `WEBPIPE_API_KEY` 传给服务器。注意：GUI 客户端不一定继承用户级环境变量——如果环境变量明明已设置，`webpipe_verify_auth` 却报缺少 Key，请把 Key 直接写进客户端 MCP 配置的 `env` 字段。
 
 在 https://webpipe.ai/api-keys.html 获取 Key。绝不要打印、echo、记录日志或提交它。
 
-### 4. 验证
+### 5. 验证
 
 用两次真实调用证明接入成功。让宿主智能体执行：
 
@@ -124,7 +135,7 @@ webpipe_scrape(url="https://example.com")
 
 一次成功的 `webpipe_verify_auth` 即可判定安装完成。可选地，再对一个真实站点跑 `webpipe_map`、`webpipe_crawl`、`webpipe_browser`，确认完整的工具面都可用。
 
-### 5. 常见问题
+### 6. 常见问题
 
 所有工具都把错误作为可读字符串返回（绝不抛异常），前缀为 ❌ 认证/参数/服务端、⚠️ 限流、🌐 网络、🔴 后端——每条消息都附带推荐的恢复步骤。常见情况：
 
@@ -155,7 +166,7 @@ webpipe_verify_auth 返回 authenticated: true
 - **webpipe_verify_auth** — 无必填参数。安装验证时以及遇到任何认证错误后，先调用它。
 - **webpipe_scrape** — `url` 必填。`formats`：`markdown`（默认）、`html`、`rawHtml`、`links`、`metadata`、`json`；`json_schema` 指导 JSON 字段抽取；`use_proxy`/`proxy`/`cookie` 用于反爬站点。
 - **webpipe_map** — `url` 必填。`limit`（默认 5000）、`search` 关键字过滤、`sitemap` include/only/exclude、`same_domain`（默认 true）。
-- **webpipe_crawl** — `url` 必填。`limit`（默认 100，最大 10000）、`max_discovery_depth`、`include_paths`/`exclude_paths` 正则、`max_concurrency`（1-10）、`scrape_formats`。阻塞到完成；结果保留 24 小时。
+- **webpipe_crawl** — `url` 必填。`limit`（默认 100，最大 10000）、`max_discovery_depth`、`include_paths`/`exclude_paths` 正则、`max_concurrency`（1-10）、`scrape_formats`。阻塞到完成；结果保留 24 小时。务必传有限的 `timeout`（如 120）和较小的 `limit`——不传 `timeout` 会阻塞到整次爬取结束，`limit` 过大会把所有页面塞进一个返回值（有撑爆上下文的风险）。
 - **webpipe_browser** — 三种用法：
   - 一次性：不传 `session_id` —— 创建会话 -> 执行 `actions` -> 抓取 -> 自动关闭。
   - 持久会话：`auto_close=false` —— 响应中带 `session_id`；下次调用传入它即可延续浏览器状态（登录态、Cookie）。

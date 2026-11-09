@@ -22,7 +22,7 @@ Full parameter reference: the tool schema shown in your MCP client, the docstrin
 
 ## Autonomous Setup
 
-Treat setup as one state machine: **preflight -> install MCP -> authenticate -> verify**. Do not make the user repeat a step that the agent can complete from the terminal.
+Treat setup as one state machine: **preflight -> install MCP -> authorize (client-side) -> authenticate -> verify**. Do not make the user repeat a step that the agent can complete from the terminal.
 
 ### 1. Preflight
 
@@ -44,25 +44,33 @@ If `webpipe` is already listed, skip installation and go to Verify.
 
 #### Local (Python stdio server)
 
-Install dependencies and get the server code:
+Get the server code and install dependencies inside an isolated venv — do NOT
+`pip install` into the shared/global interpreter (it is often used by other tools):
 
 ```bash
-pip install fastmcp webpipe-sdk
-# server source: https://github.com/tiejunshi/webpipe-mcp
+git clone https://github.com/tiejunshi/webpipe-mcp
+cd webpipe-mcp
+python -m venv .venv
+.venv/Scripts/pip install fastmcp webpipe-sdk      # Windows
+# .venv/bin/pip install fastmcp webpipe-sdk        # macOS / Linux
 ```
+
+The MCP registration must point at the venv interpreter —
+`<repo>/.venv/Scripts/python.exe` (Windows) or `<repo>/.venv/bin/python`
+(macOS/Linux) — NOT the global `python`, or the imports will not resolve.
 
 **Claude Code** (CLI):
 
 ```bash
 claude mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
-  -- python /absolute/path/to/webpipe-mcp/server.py
+  -- <venv-python> /absolute/path/to/webpipe-mcp/server.py
 ```
 
 **Codex** (CLI):
 
 ```bash
 codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
-  -- python /absolute/path/to/webpipe-mcp/server.py
+  -- <venv-python> /absolute/path/to/webpipe-mcp/server.py
 ```
 
 **JSON-configured agents.** The template below follows **Claude Desktop's config file format** (`mcpServers` + `command`/`args`/`env` — the de-facto stdio template most clients copy). Other agents use the same shape but different file locations — see the table after the template:
@@ -71,7 +79,7 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 {
   "mcpServers": {
     "webpipe": {
-      "command": "python",
+      "command": "<venv-python>",
       "args": ["/absolute/path/to/webpipe-mcp/server.py"],
       "env": { "WEBPIPE_API_KEY": "your-webpipe-api-key" }
     }
@@ -82,6 +90,7 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 | Agent | Config file | Notes |
 | --- | --- | --- |
 | Claude Code | `.mcp.json` (project) or `~/.claude.json` | Expands `${WEBPIPE_API_KEY}` automatically |
+| WorkBuddy | `~/.workbuddy/mcp.json` (file name has no leading dot) | After saving, also trust/enable the server in the connectors UI — the config file alone is not enough |
 | Cursor | `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project) | Same `mcpServers` shape |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | Same `mcpServers` shape |
 | Claude Desktop | Windows: `%APPDATA%\Claude\claude_desktop_config.json`; macOS: `~/Library/Application Support/Claude/claude_desktop_config.json` | Use the same JSON shape |
@@ -91,20 +100,28 @@ codex mcp add webpipe --env WEBPIPE_API_KEY=your-webpipe-api-key \
 
 Clients that support environment-variable expansion (for example Claude Code) substitute `${WEBPIPE_API_KEY}` automatically. For clients that do not, put the literal key in place of `${WEBPIPE_API_KEY}` — warn the user that the key then sits in a plain config file.
 
-Replace `/absolute/path/to/webpipe-mcp/server.py` with the real absolute path on this machine, and `your-webpipe-api-key` with the key from the dashboard.
+Replace `<venv-python>` with the venv interpreter path and `/absolute/path/to/webpipe-mcp/server.py` with the real absolute path on this machine, and put the real key from the dashboard in place of `your-webpipe-api-key`.
 
-### 3. Authenticate
+### 3. Authorize the server inside the client (if required)
+
+Some clients (WorkBuddy, for example) require an explicit trust/enable step in
+their MCP/connectors management UI before the server is loaded — writing the
+config file alone is not enough. Symptom: the config looks correct and the
+server process launches, but no `webpipe_*` tools appear in the session. Fix:
+open the client's MCP management screen and trust/enable `webpipe` there.
+
+### 4. Authenticate
 
 WebPipe uses a single API key. Precedence, highest first:
 
 1. The explicit `api_key` argument passed to a tool call.
 2. The environment variable `WEBPIPE_API_KEY`.
 
-The client passes the key to the server as the environment variable `WEBPIPE_API_KEY`.
+The client passes the key to the server as the environment variable `WEBPIPE_API_KEY`. GUI clients do not always inherit user-level environment variables — if `webpipe_verify_auth` reports a missing key although the variable is set, put the key directly into the `env` block of the client's MCP config.
 
 Get a key at https://webpipe.ai/api-keys.html. Never print, echo, log, or commit it.
 
-### 4. Verify
+### 5. Verify
 
 Prove the integration works with two real calls. Ask the host agent to run:
 
@@ -124,7 +141,7 @@ Expected result: a non-error payload whose Markdown contains "Example Domain".
 
 One successful `webpipe_verify_auth` is enough to declare setup complete. Optionally exercise `webpipe_map`, `webpipe_crawl`, and `webpipe_browser` on a real site to confirm the full tool surface.
 
-### 5. Troubleshooting
+### 6. Troubleshooting
 
 Every tool returns errors as a readable string (never an exception), prefixed with ❌ auth/param/server, ⚠️ rate limit, 🌐 network, or 🔴 backend — each message includes a recommended recovery step. Common cases:
 
@@ -155,7 +172,7 @@ Full input/output details live in the tool schema and in [server.py](https://git
 - **webpipe_verify_auth** — no required args. Call first during setup and after any auth error.
 - **webpipe_scrape** — `url` required. `formats`: `markdown` (default), `html`, `rawHtml`, `links`, `metadata`, `json`; `json_schema` guides JSON extraction; `use_proxy`/`proxy`/`cookie` for anti-bot sites.
 - **webpipe_map** — `url` required. `limit` (default 5000), `search` keyword filter, `sitemap` include/only/exclude, `same_domain` (default true).
-- **webpipe_crawl** — `url` required. `limit` (default 100, max 10000), `max_discovery_depth`, `include_paths`/`exclude_paths` regexes, `max_concurrency` (1-10), `scrape_formats`. Blocks until finished; results kept 24 hours.
+- **webpipe_crawl** — `url` required. `limit` (default 100, max 10000), `max_discovery_depth`, `include_paths`/`exclude_paths` regexes, `max_concurrency` (1-10), `scrape_formats`. Blocks until finished; results kept 24 hours. Always pass a finite `timeout` (e.g. 120) and a small `limit` — without `timeout` the call blocks for the whole crawl, and a large `limit` returns every page in one payload (context-overflow risk).
 - **webpipe_browser** — three usage patterns:
   - One-shot: omit `session_id` — create, run `actions`, scrape, auto-close.
   - Persistent: `auto_close=false` — the response carries a `session_id`; pass it on the next call to keep browser state (login, cookies) across calls.
